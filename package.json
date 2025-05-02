@@ -1,0 +1,27 @@
+{
+  "name": "logseq-harper-ls",
+  "version": "0.0.1",
+  "description": "Harper-LS integration",
+  "main": "dist/index.html",
+  "author": "©Joshua Hagofsky",
+  "license": "MIT",
+  "targets": {
+    "main": false
+  },
+  "default": "dist/index.html",
+  "scripts": {
+    "dev": "parcel ./index.html --public-url ./",
+    "build": "parcel build --public-url . --no-source-maps index.html"
+  },
+  "devDependencies": {
+    "@logseq/libs": "^0.0.6",
+    "parcel": "^2.0.0"
+  },
+  "logseq": {
+    "id": "logseq-harper-ls",
+    "icon": "./logo.png"
+  },
+  "dependencies": {
+    "harper.js": "^0.29.0"
+  }
+}
