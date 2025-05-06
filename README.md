@@ -32,4 +32,4 @@ I welcome feedback and [contributions from the community](https://github.com/the
 
 ## I have a problem or feature request...
 
-Let me know if you have any problems, feature requests, or feedback of any kind by filling out an [issue on the main repository](https://github.com/theoreticallyjosh/logseq-harper-plugin).
+Let me know if you have any problems, feature requests, or feedback of any kind by filling out an [issue on the main repository](https://github.com/theoreticallyjosh/logseq-plugin-harper).
