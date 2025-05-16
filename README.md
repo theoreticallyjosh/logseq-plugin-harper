@@ -1,4 +1,4 @@
-# `logseq-harper-plugin`
+# `logseq-plugin-harper`
 
 The [Harper](https://writewithharper.com/) [Logseq](https://logseq.com/) plugin is a powerful, privacy-first grammar and spell-checking tool designed specifically for Obsidian users. Unlike many other grammar checkers, Harper operates entirely offline, ensuring your data remains secure while providing real-time, high-performance corrections. This plugin is ideal for writers, academics, and developers who value privacy and efficiency in their workflows.
 
@@ -15,7 +15,7 @@ Unlike other offerings (like Grammarly) Harper explicitly ignores the contents o
 
 ## Installation Guide
 
-1. Open Logseq and navigate to **... → Plugins → Market Place **.
+1. Open Logseq and navigate to **... → Plugins → Market Place**.
 2. Search for "Harper" in the plugin library.
 3. Click "Install"
 4. Start typing in your notes—Harper will automatically highlight errors as you go!
