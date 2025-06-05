@@ -61,7 +61,7 @@ function insertLintOverlay(block: CBlock, issues: Lint[]) {
     currentIdx++;
     j = currentIssue.span().end - 1;
   }
-  harperDiv.innerHTML = overlay;
+  harperDiv.innerHTML = overlay.replace(/\n/g, "<br/>");
   for (let j = 0; j < issues.length; j++) {
     addContextMenu(j, block, issues[j]);
   }
