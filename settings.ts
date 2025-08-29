@@ -27,6 +27,13 @@ export const settingsSchema: Array<SettingSchemaDesc> = [
     default: "",
     description: `File path to custom dictionary`,
   },
+  {
+    key: "HarperUserDictionary",
+    type: "string",
+    title: "User Dictionary",
+    default: "[]",
+    description: `JSON array of words added by user`,
+  },
 ];
 
 export const dialects = {

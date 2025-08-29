@@ -11,6 +11,7 @@ Unlike other offerings (like Grammarly) Harper explicitly ignores the contents o
 - Linting diagnostics in edit mode
 - Context menu to view and apply suggestions
 - Integration with user defined dictionary
+- Add words to dictionary from the UI
 - Toggle all lint rules from configuration page
 
 ## Installation Guide
@@ -27,7 +28,6 @@ Unlike other offerings (like Grammarly) Harper explicitly ignores the contents o
 
 I welcome feedback and [contributions from the community](https://github.com/theoreticallyjosh/logseq-harper-plugin). Planned updates include:
 
-- Adding words to dictionary from the UI
 - Linting diagnostics in non edit view
 
 ## I have a problem or feature request...

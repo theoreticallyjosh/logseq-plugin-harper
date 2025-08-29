@@ -78,6 +78,18 @@ function openMenu(event: MouseEvent, block: CBlock, issue: Lint) {
   menu.style.boxShadow = "0 4px 8px rgba(0,0,0,0.1)";
   menu.classList.add("menu-links-wrapper");
   menu.innerHTML += `<b>${issue.lint_kind_pretty()}</b><br/>${issue.message()}<hr class="menu-separator">`;
+
+  // Add "Add to dictionary" option for spelling errors
+  if (issue.lint_kind() === "Spelling") {
+    const addToDictOpt = document.createElement("a");
+    addToDictOpt.classList.add("flex", "justify-between", "menu-link");
+    addToDictOpt.innerHTML = `<span class="flex-1">Add to dictionary</span>`;
+    addToDictOpt.onclick = () => {
+      addWordToDictionary(block, issue);
+    };
+    menu.appendChild(addToDictOpt);
+  }
+
   issue.suggestions().forEach((element: Suggestion) => {
     const opt = document.createElement("a");
     opt.classList.add("flex", "justify-between", "menu-link");
@@ -133,6 +145,42 @@ async function applySuggestion(block: CBlock, issue: Lint, element: Suggestion) 
       break;
   }
   logseq.UI.showMsg("Fix applied ✅", "success");
+}
+
+async function addWordToDictionary(block: CBlock, issue: Lint) {
+  const word = block.value.substring(issue.span().start, issue.span().end).toLowerCase();
+
+  // Get current user dictionary
+  let userDict: string[] = [];
+  try {
+    const currentDict = logseq.settings!.HarperUserDictionary || "[]";
+    userDict = JSON.parse(currentDict);
+  } catch (e) {
+    console.error("Error parsing user dictionary:", e);
+    userDict = [];
+  }
+
+  // Check if word already exists
+  if (userDict.includes(word)) {
+    logseq.UI.showMsg(`"${word}" is already in your dictionary`, "info");
+    return;
+  }
+
+  // Add word to dictionary
+  userDict.push(word);
+
+  // Update settings
+  logseq.updateSettings({ HarperUserDictionary: JSON.stringify(userDict) });
+
+  // Add to linter immediately
+  linter.importWords([word]);
+
+  // Show success message and close menu
+  logseq.UI.showMsg(`Added "${word}" to dictionary ✅`, "success");
+  parent.document.getElementById("harper-suggestions")?.remove();
+
+  // Re-lint the block to remove the highlighting
+  lintBlockContent(block);
 }
 
 function highlightIssue(blockText: string, issue: Lint, id: number): string {
@@ -242,6 +290,19 @@ function updateHarperSettings() {
       linter.importWords(words);
     });
   }
+
+  // Load user dictionary words
+  if (logseq.settings!.HarperUserDictionary) {
+    try {
+      const userWords = JSON.parse(logseq.settings!.HarperUserDictionary);
+      if (Array.isArray(userWords) && userWords.length > 0) {
+        linter.importWords(userWords);
+      }
+    } catch (e) {
+      console.error("Error loading user dictionary:", e);
+    }
+  }
+
   linter.setDialect(dialects[logseq.settings!.HarperDialect]);
   var conf: LintConfig = {};
   for (const setting of Object.keys(logseq.settings!)) {
