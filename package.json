@@ -14,7 +14,7 @@
     "build": "parcel build --public-url . --no-source-maps index.html"
   },
   "devDependencies": {
-    "@logseq/libs": "^0.0.6",
+    "@logseq/libs": "^0.0.17",
     "parcel": "^2.0.0"
   },
   "logseq": {
