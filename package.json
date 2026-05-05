@@ -1,6 +1,6 @@
 {
   "name": "logseq-harper-ls",
-  "version": "0.0.1",
+  "version": "0.2.1",
   "description": "Harper-LS integration",
   "main": "dist/index.html",
   "author": "©Joshua Hagofsky",
@@ -14,8 +14,8 @@
     "build": "parcel build --public-url . --no-source-maps index.html"
   },
   "devDependencies": {
-    "@logseq/libs": "^0.0.17",
-    "parcel": "^2.0.0"
+    "@logseq/libs": "^0.3.3",
+    "parcel": "^2.16.4"
   },
   "logseq": {
     "id": "logseq-harper-ls",

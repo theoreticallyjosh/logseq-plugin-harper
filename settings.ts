@@ -1,5 +1,5 @@
 import { SettingSchemaDesc } from "@logseq/libs/dist/LSPlugin";
-import { Dialect, LintConfig, LocalLinter } from "harper.js";
+import { Dialect, LintConfig, LocalLinter } from "harper.js/dist/index";
 
 export type Settings = {
   ignoredLints?: string;

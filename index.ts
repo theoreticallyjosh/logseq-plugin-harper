@@ -1,67 +1,72 @@
 import "@logseq/libs";
-import { LintConfig, Linter, Suggestion, LocalLinter, Dialect, binary, SuggestionKind } from "harper.js";
-import { Lint } from "harper.js";
-import { dialects, getSettingsSchema, settingsSchema } from "./settings";
-type LintIssue = {
-  message: string;
-  fix?: {
-    description: string;
-    apply: (content: string) => string;
-  };
-};
+import { LintConfig, Linter, Suggestion, LocalLinter, Dialect, SuggestionKind, Lint } from "harper.js/dist/index";
+// Important: In 2.0, the binary is imported from its own subpath
+import { binary } from "harper.js/dist/binary";
+import { dialects, getSettingsSchema } from "./settings";
 
 type CBlock = {
   id: string;
   value: string;
-  element: Element;
+  element?: Element | null;
 };
 
 var linter: LocalLinter;
-function lintBlockContent(block: CBlock) {
+
+/**
+ * Main Linter Logic
+ */
+async function lintBlockContent(block: CBlock) {
   parent.document.getElementById("harper-suggestions")?.remove();
-  linter.lint(block.value).then((value: Lint[]) => {
-    insertLintOverlay(block, value);
-  });
+
+  // Harper 2.0 returns a Promise of Lint[]
+  const issues = await linter.lint(block.value);
+  insertLintOverlay(block, issues);
 }
 
 function insertLintOverlay(block: CBlock, issues: Lint[]) {
   const blockElement = parent.document.querySelector(`[blockid="${block.id}"]`) as HTMLElement;
-  if (!blockElement) {
-    return;
-  }
-  var harperDiv: Element | null;
-  harperDiv = blockElement.querySelector(`[id="harper-${block.id}"]`);
-  if (harperDiv === null) {
+  if (!blockElement) return;
+
+  let harperDiv = blockElement.querySelector(`[id="harper-${block.id}"]`) as HTMLElement;
+  if (!harperDiv) {
     harperDiv = document.createElement("div");
     harperDiv.id = `harper-${block.id}`;
     blockElement.querySelector(".editor-inner")?.appendChild(harperDiv);
   }
+
   harperDiv.innerHTML = block.value;
   harperDiv.classList.remove(...harperDiv.classList);
   harperDiv.classList.add("harper-ls-text");
 
-  harperDiv.classList.add(...blockElement.querySelector("textarea")!.classList);
-  harperDiv.addEventListener("click", function (event) {
+  const textarea = blockElement.querySelector("textarea");
+  if (textarea) {
+    harperDiv.classList.add(...textarea.classList);
+  }
+
+  harperDiv.addEventListener("click", (event) => {
     event.preventDefault();
-    blockElement.querySelector("textarea")?.focus();
+    textarea?.focus();
   });
 
   let overlay = "";
   let currentIdx = 0;
-  for (let j = 0; j < block.value.length; j++) {
+  const text = block.value;
+
+  for (let j = 0; j < text.length; j++) {
     let currentIssue = issues[currentIdx];
-    if (!currentIssue) {
-      break;
-    }
+    if (!currentIssue) break;
+
     if (j < currentIssue.span().start) {
-      overlay += block.value[j];
+      overlay += text[j];
       continue;
     }
-    overlay += highlightIssue(block.value, currentIssue, currentIdx);
+    overlay += highlightIssue(text, currentIssue, currentIdx);
     currentIdx++;
     j = currentIssue.span().end - 1;
   }
+
   harperDiv.innerHTML = overlay.replace(/\n/g, "<br/>");
+
   for (let j = 0; j < issues.length; j++) {
     addContextMenu(j, block, issues[j]);
   }
@@ -70,136 +75,92 @@ function insertLintOverlay(block: CBlock, issues: Lint[]) {
 function openMenu(event: MouseEvent, block: CBlock, issue: Lint) {
   const menu = document.createElement("div");
   menu.id = "harper-suggestions";
-  menu.style.position = "absolute";
-  menu.style.padding = "3px";
-  menu.style.top = `${event.pageY}px`;
-  menu.style.left = `${event.pageX}px`;
-  menu.style.borderRadius = "6px";
-  menu.style.boxShadow = "0 4px 8px rgba(0,0,0,0.1)";
+  menu.style.position = "fixed";
+  menu.style.top = `${event.clientY}px`;
+  menu.style.left = `${event.clientX}px`;
   menu.classList.add("menu-links-wrapper");
-  menu.innerHTML += `<b>${issue.lint_kind_pretty()}</b><br/>${issue.message()}<hr class="menu-separator">`;
 
-  // Add "Add to dictionary" option for spelling errors
+  menu.innerHTML = `<b>${issue.lint_kind_pretty()}</b><br/>${issue.message()}<hr class="menu-separator">`;
+
   if (issue.lint_kind() === "Spelling") {
     const addToDictOpt = document.createElement("a");
     addToDictOpt.classList.add("flex", "justify-between", "menu-link");
     addToDictOpt.innerHTML = `<span class="flex-1">Add to dictionary</span>`;
-    addToDictOpt.onclick = () => {
-      addWordToDictionary(block, issue);
-    };
+    addToDictOpt.onclick = () => addWordToDictionary(block, issue);
     menu.appendChild(addToDictOpt);
   }
 
   issue.suggestions().forEach((element: Suggestion) => {
     const opt = document.createElement("a");
     opt.classList.add("flex", "justify-between", "menu-link");
-    switch (element.kind()) {
-      case SuggestionKind.Replace:
-        opt.innerHTML += `<span class="flex-1">Replace with `;
-        break;
-      case SuggestionKind.Remove:
-        opt.innerHTML += `<span class="flex-1">Remove `;
-        break;
-      default:
-        opt.innerHTML += `<span class="flex-1">Insert `;
-    }
-    opt.innerHTML += `"${element.get_replacement_text()}"</span>`;
-    opt.onclick = () => {
-      applySuggestion(block, issue, element);
-    };
+
+    let label = "Insert ";
+    if (element.kind() === SuggestionKind.Replace) label = "Replace with ";
+    if (element.kind() === SuggestionKind.Remove) label = "Remove ";
+
+    opt.innerHTML = `<span class="flex-1">${label} "${element.get_replacement_text()}"</span>`;
+    opt.onclick = () => applySuggestion(block, issue, element);
     menu.appendChild(opt);
   });
 
   parent.document.body.appendChild(menu);
-  setTimeout(() => {
-    parent.addEventListener("click", function onClickOutside() {
-      menu.remove();
-      parent.removeEventListener("click", onClickOutside);
-    });
-  }, 0);
+
+  const close = () => {
+    menu.remove();
+    parent.removeEventListener("click", close);
+  };
+  setTimeout(() => parent.addEventListener("click", close), 0);
 }
 
 async function applySuggestion(block: CBlock, issue: Lint, element: Suggestion) {
+  const span = issue.span();
+  let newValue = "";
+
   switch (element.kind()) {
     case SuggestionKind.InsertAfter:
-      await logseq.Editor.updateBlock(
-        block.id,
-        block.value.substring(0, issue.span().end) +
-          element.get_replacement_text() +
-          block.value.substring(issue.span().end)
-      );
+      newValue = block.value.substring(0, span.end) + element.get_replacement_text() + block.value.substring(span.end);
       break;
     case SuggestionKind.Remove:
-      await logseq.Editor.updateBlock(
-        block.id,
-        block.value.substring(0, issue.span().start) + block.value.substring(issue.span().end)
-      );
+      newValue = block.value.substring(0, span.start) + block.value.substring(span.end);
       break;
     case SuggestionKind.Replace:
-      await logseq.Editor.updateBlock(
-        block.id,
-        block.value.substring(0, issue.span().start) +
-          element.get_replacement_text() +
-          block.value.substring(issue.span().end)
-      );
+      newValue =
+        block.value.substring(0, span.start) + element.get_replacement_text() + block.value.substring(span.end);
       break;
   }
+
+  await logseq.Editor.updateBlock(block.id, newValue);
   logseq.UI.showMsg("Fix applied ✅", "success");
 }
 
 async function addWordToDictionary(block: CBlock, issue: Lint) {
   const word = block.value.substring(issue.span().start, issue.span().end).toLowerCase();
+  let userDict: string[] = JSON.parse(logseq.settings?.HarperUserDictionary || "[]");
 
-  // Get current user dictionary
-  let userDict: string[] = [];
-  try {
-    const currentDict = logseq.settings!.HarperUserDictionary || "[]";
-    userDict = JSON.parse(currentDict);
-  } catch (e) {
-    console.error("Error parsing user dictionary:", e);
-    userDict = [];
+  if (!userDict.includes(word)) {
+    userDict.push(word);
+    logseq.updateSettings({ HarperUserDictionary: JSON.stringify(userDict) });
+    await linter.importWords([word]);
   }
 
-  // Check if word already exists
-  if (userDict.includes(word)) {
-    logseq.UI.showMsg(`"${word}" is already in your dictionary`, "info");
-    return;
-  }
-
-  // Add word to dictionary
-  userDict.push(word);
-
-  // Update settings
-  logseq.updateSettings({ HarperUserDictionary: JSON.stringify(userDict) });
-
-  // Add to linter immediately
-  linter.importWords([word]);
-
-  // Show success message and close menu
   logseq.UI.showMsg(`Added "${word}" to dictionary ✅`, "success");
   parent.document.getElementById("harper-suggestions")?.remove();
-
-  // Re-lint the block to remove the highlighting
   lintBlockContent(block);
 }
 
 function highlightIssue(blockText: string, issue: Lint, id: number): string {
-  let word = blockText.substring(issue.span().start, issue.span().end);
-  let ret = "";
-  switch (issue.lint_kind()) {
-    case "Spelling":
-      ret = `<span id="harper-issue-${id}" class="lint-error">${word}</span>`;
-      break;
-    default:
-      ret = `<span id="harper-issue-${id}" class="lint-warning">${word}</span>`;
-  }
-  return ret;
+  const word = blockText.substring(issue.span().start, issue.span().end);
+  const type = issue.lint_kind() === "Spelling" ? "lint-error" : "lint-warning";
+  return `<span id="harper-issue-${id}" class="${type}">${word}</span>`;
 }
 
 function addContextMenu(id: number, block: CBlock, issue: Lint) {
-  let element = parent.document.getElementById(`harper-issue-${id}`);
-  element!.title = issue.message();
-  element!.oncontextmenu = async (event: MouseEvent) => {
+  const element = parent.document.getElementById(`harper-issue-${id}`);
+  if (!element) return;
+
+  element.title = issue.message();
+  element.oncontextmenu = (event: MouseEvent) => {
+    event.preventDefault();
     if (issue.suggestion_count() > 0) {
       openMenu(event, block, issue);
     } else {
@@ -208,125 +169,93 @@ function addContextMenu(id: number, block: CBlock, issue: Lint) {
   };
 }
 
+/**
+ * Plugin Infrastructure
+ */
 function setupEditingDetection() {
-  const debounce = (func, delay) => {
-    var debounceTimer: number;
-    return function () {
-      const context = this;
-      const args = arguments;
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => func.apply(context, args), delay);
+  const debounce = (func: Function, delay: number) => {
+    let timer: any;
+    return (...args: any[]) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => func(...args), delay);
     };
   };
+
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       const target = mutation.target as HTMLElement;
       if (mutation.type === "childList") {
-        var blockId;
-        var value = "";
-        var element;
-        if (mutation.target.nodeName == "TEXTAREA") {
-          const target = mutation.target as HTMLElement;
-          element = mutation.target.parentElement;
-          blockId = target.closest("[blockid]")?.getAttribute("blockid");
-          value = target.innerHTML;
-        } else if (target.classList.contains("editor-wrapper")) {
-          blockId = target.closest("[blockid]")?.getAttribute("blockid");
-          value = target.getElementsByTagName("textarea")[0]?.textContent || "";
+        let blockId: string | null = null;
+        let value = "";
+
+        if (target.nodeName === "TEXTAREA") {
+          blockId = target.closest("[blockid]")?.getAttribute("blockid") || null;
+          value = (target as HTMLTextAreaElement).value;
+        } else if (target.classList?.contains("editor-wrapper")) {
+          blockId = target.closest("[blockid]")?.getAttribute("blockid") || null;
+          value = target.querySelector("textarea")?.value || "";
         }
+
         if (blockId) {
-          const send = debounce(() => lintBlockContent({ id: blockId, value: value, element: element }), 300);
-          send();
+          const run = debounce(() => lintBlockContent({ id: blockId!, value }), 300);
+          run();
         }
       }
     });
   });
+
   observer.observe(parent.document.body, { childList: true, subtree: true });
 }
 
+async function updateHarperSettings() {
+  if (!linter) return;
+
+  // Set Dialect
+  const dialectKey = logseq.settings?.HarperDialect;
+  if (dialectKey && dialects[dialectKey]) {
+    await linter.setDialect(dialects[dialectKey]);
+  }
+
+  // Load user dictionary
+  const userWords = JSON.parse(logseq.settings?.HarperUserDictionary || "[]");
+  if (userWords.length > 0) {
+    await linter.importWords(userWords);
+  }
+
+  // Map settings to LintConfig
+  const conf: LintConfig = {};
+  for (const key in logseq.settings) {
+    if (key.startsWith("HarperRule")) {
+      conf[key.substring(10)] = logseq.settings[key];
+    }
+  }
+  await linter.setLintConfig(conf);
+}
+
 function main() {
-  console.log("Harper-ls plugin loaded");
-  updateHarperSettings();
-  setupEditingDetection();
   logseq.provideStyle(`
-.lint-warning {
-  text-decoration: green wavy underline;
-  visibility:visible !important;
-  pointer-events:auto;
-}
-.lint-error {
-  text-decoration: red wavy underline;
-  visibility:visible !important;
-  pointer-events:auto;
-}
-.harper-ls-text{
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0px;
-    left: 0px;
-    color:rgba(0,0,0,0);
-    pointer-events: none; /* Important: allow clicks to pass through */
-}
-`);
-  logseq.App.onCurrentGraphChanged(() => {
-    console.log("Graph changed, restarting linter");
-    setupEditingDetection();
-  });
-
-  logseq.onSettingsChanged(() => {
-    updateHarperSettings();
-  });
-}
-
-function initializeHarper(): LocalLinter {
-  const ret = new LocalLinter({ binary: binary });
-  return ret;
-}
-
-function updateHarperSettings() {
-  if (logseq.settings!.HarperCustomDictionary && logseq.settings!.HarperCustomDictionary != "") {
-    loadFromFile(logseq.settings!.HarperCustomDictionary).then((words) => {
-      linter.importWords(words);
-    });
-  }
-
-  // Load user dictionary words
-  if (logseq.settings!.HarperUserDictionary) {
-    try {
-      const userWords = JSON.parse(logseq.settings!.HarperUserDictionary);
-      if (Array.isArray(userWords) && userWords.length > 0) {
-        linter.importWords(userWords);
-      }
-    } catch (e) {
-      console.error("Error loading user dictionary:", e);
+    .lint-warning { text-decoration: green wavy underline; visibility: visible !important; pointer-events: auto; }
+    .lint-error { text-decoration: red wavy underline; visibility: visible !important; pointer-events: auto; }
+    .harper-ls-text { 
+      width: 100%; height: 100%; position: absolute; top: 0; left: 0; 
+      color: transparent; pointer-events: none; white-space: pre-wrap;
     }
-  }
+    .menu-links-wrapper { background: var(--ls-primary-background-color); border: 1px solid var(--ls-border-color); z-index: 9999; }
+  `);
 
-  linter.setDialect(dialects[logseq.settings!.HarperDialect]);
-  var conf: LintConfig = {};
-  for (const setting of Object.keys(logseq.settings!)) {
-    if (setting.startsWith("HarperRule")) {
-      conf[setting.substring(10)] = logseq.settings![setting];
-    }
-  }
-  linter.setLintConfig(conf);
+  setupEditingDetection();
+
+  logseq.onSettingsChanged(() => updateHarperSettings());
 }
 
-async function loadFromFile(path: string): Promise<string[]> {
-  try {
-    const response = await fetch(`file://${path}`);
-    if (!response.ok) throw new Error(`Failed to fetch file: ${response.status}`);
-    const text = await response.text();
-    const lines = text.split("\n").map((line) => line.trimEnd());
-    return lines;
-  } catch (error) {
-    console.error("Error reading file:", error);
-    throw error;
-  }
-}
+// 2.0 Initialization
+linter = new LocalLinter({ binary });
 
-linter = initializeHarper();
-getSettingsSchema(linter).then((settings) => {
-  logseq.useSettingsSchema(settings).ready(main).catch(console.error);
+getSettingsSchema(linter).then((schema) => {
+  logseq
+    .useSettingsSchema(schema)
+    .ready(() => {
+      updateHarperSettings().then(main);
+    })
+    .catch(console.error);
 });
