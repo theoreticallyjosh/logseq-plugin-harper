@@ -22,6 +22,6 @@
     "icon": "./logo.png"
   },
   "dependencies": {
-    "harper.js": "^2.0.0"
+    "harper.js": "^3.0.0"
   }
 }
